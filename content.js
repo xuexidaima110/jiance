@@ -322,6 +322,42 @@
           }
         };
 
+        // 深度搜索（document + shadowRoot + iframe）
+        const deepQueryAll = (selector, roots = [document, workDoc]) => {
+          const results = [];
+          const visited = new Set();
+
+          const walk = (root) => {
+            if (!root || visited.has(root)) return;
+            visited.add(root);
+
+            try {
+              results.push(...root.querySelectorAll(selector));
+            } catch {}
+
+            // shadow roots
+            const walker = root.createTreeWalker?.(root, NodeFilter.SHOW_ELEMENT);
+            if (walker) {
+              let node = walker.currentNode;
+              while (node) {
+                if (node.shadowRoot) walk(node.shadowRoot);
+                node = walker.nextNode();
+              }
+            }
+
+            // iframes
+            const frames = root.querySelectorAll?.('iframe') || [];
+            for (const frame of frames) {
+              try {
+                if (frame.contentDocument) walk(frame.contentDocument);
+              } catch {}
+            }
+          };
+
+          for (const r of roots) walk(r);
+          return results;
+        };
+
         const LV_COMBO_SELECTOR = 'div[role="combobox"][class*="lv-select-single"]';
         const COMMON_COMBO_SELECTOR = '.arco-select-view, [class*="select-view"], [role="combobox"], .arco-trigger';
 
@@ -437,16 +473,25 @@
 
         const waitDropdown = async (timeout = 1800) => {
           const end = Date.now() + timeout;
+          const selector = '.arco-select-dropdown, .arco-trigger-popup, .lv-select-dropdown, [class*="dropdown"], [class*="option-list"], [role="listbox"]';
           while (Date.now() < end) {
-            const inWork = workDoc.querySelector('.arco-select-dropdown, .arco-trigger-popup, [class*="dropdown"], [class*="option-list"]');
-            if (inWork && isVis(inWork)) return inWork;
-            const inLv = workDoc.querySelector('.lv-select-dropdown, [class*="lv-select"][class*="dropdown"], [class*="lv-select-options"], [role="listbox"]');
-            if (inLv && isVis(inLv)) return inLv;
-            const inMain = document.querySelector('.arco-select-dropdown, .arco-trigger-popup, .lv-select-dropdown, [class*="dropdown"], [class*="option-list"], [role="listbox"]');
-            if (inMain && isVis(inMain)) return inMain;
+            const list = deepQueryAll(selector);
+            const visible = list.find(el => isVis(el));
+            if (visible) return visible;
             await sleep(80);
           }
           return null;
+        };
+
+        const getClickable = (el) => {
+          let p = el;
+          for (let i = 0; i < 6 && p; i++, p = p.parentElement) {
+            if (!p) break;
+            if (p.tagName === 'LI') return p;
+            if (p.getAttribute && p.getAttribute('role') === 'option') return p;
+            if (p.className && /option|menu-item|select/i.test(p.className)) return p;
+          }
+          return el;
         };
 
         const pickOption = async (optionText, options = {}) => {
@@ -457,9 +502,9 @@
 
           await sleep(300);
 
-          const nodes = [
-            ...document.querySelectorAll('.arco-select-option, [role="option"], li')
-          ];
+          const nodes = deepQueryAll(
+            '.select-option-label-content-jrrNUu, [class*="select-option-label"], [class*="option"], [role="option"], li'
+          );
 
           let best = null;
           let bestScore = -1;
@@ -483,9 +528,8 @@
           }
 
           if (best) {
-            best.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-            best.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-            best.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            const clickTarget = getClickable(best);
+            await click(clickTarget);
             await sleep(500);
             return true;
           }
@@ -515,7 +559,6 @@
             await sleep(140);
             await click(ctrl);
             await sleep(600 + Math.random() * 500);
-            ok = await pickOption(optionText);
           }
           if (ok) usedControls.add(ctrl);
           return ok;
@@ -647,7 +690,7 @@
             const ar = el.getAttribute('aria-label') || '';
             const tt = el.getAttribute('title') || '';
             const cls = el.className || '';
-            return textLike(txt, '提交') || textLike(txt, '生成') || textLike(ar, '提交') || textLike(ar, '生成') || textLike(tt, '提交') || textLike(tt, '生成') || /send|submit|generate/i.test(cls);
+            return textLike(txt, '提交') || textLike(txt, '生成') || textLike(ar, '提交') || textLike(ar, '生成') || textLike(tt, '提交') || textLike(tt, '生成') || /send|submit|gener[...]
           });
           if (strong && await click(strong)) return true;
 
@@ -664,7 +707,7 @@
             );
           if (smallBtn && isVis(smallBtn) && !smallBtn.disabled && await click(smallBtn)) return true;
 
-          const globalBtn = workDoc.querySelector('[class*="send"], [class*="submit"], [class*="generate"], button[type="submit"], [aria-label*="提交"], [aria-label*="生成"]');
+          const globalBtn = workDoc.querySelector('[class*="send"], [class*="submit"], [class*="generate"], button[type="submit"], [aria-label*="��交"], [aria-label*="生成"]');
           if (globalBtn && isVis(globalBtn) && !globalBtn.disabled && await click(globalBtn)) return true;
           return false;
         };
