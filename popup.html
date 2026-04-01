@@ -1,0 +1,187 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>即梦任务监控器</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- 顶部标题栏 -->
+    <header class="header">
+      <div class="header-left">
+        <span class="logo">🎬</span>
+        <span class="title">即梦任务监控器</span>
+      </div>
+      <div class="header-right">
+        <span id="statusDot" class="status-dot stopped"></span>
+        <span id="statusText" class="status-text">未运行</span>
+      </div>
+    </header>
+
+    <!-- 状态概览 -->
+    <div class="stats-bar">
+      <div class="stat-item">
+        <span class="stat-num" id="activeCount">0</span>
+        <span class="stat-label">进行中</span>
+      </div>
+      <div class="stat-divider">/</div>
+      <div class="stat-item">
+        <span class="stat-num max">10</span>
+        <span class="stat-label">最大并发</span>
+      </div>
+      <div class="stat-item" style="margin-left:12px">
+        <span class="stat-num pending" id="pendingCount">0</span>
+        <span class="stat-label">备用队列</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-num done" id="completedCount">0</span>
+        <span class="stat-label">已完成</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-num fail" id="failedCount">0</span>
+        <span class="stat-label">失败</span>
+      </div>
+      <button id="btnClearPreviousData" class="btn btn-danger-ghost btn-sm stats-action" title="清空已完成、失败和日志">清空数据</button>
+    </div>
+
+    <!-- 控制按钮 -->
+    <div class="control-bar">
+      <button id="btnToggle" class="btn btn-primary">▶ 启动监控</button>
+      <button id="btnForcePoll" class="btn btn-secondary" title="立即轮询一次">🔄 立即检查</button>
+      <button id="btnOpenJimeng" class="btn btn-ghost" title="打开即梦">打开即梦</button>
+      <button id="btnDebugCapture" class="btn btn-ghost" title="打开F12控制台查看捕获到的API请求">🐛 调试</button>
+    </div>
+
+    <!-- 标签页 -->
+    <div class="tabs">
+      <button class="tab active" data-tab="pending">备用任务</button>
+      <button class="tab" data-tab="active">进行中</button>
+      <button class="tab" data-tab="history">历史记录</button>
+      <button class="tab" data-tab="logs">日志</button>
+    </div>
+
+    <!-- 备用任务 Tab -->
+    <div class="tab-content active" id="tab-pending">
+      <div class="add-task-form">
+        <div style="position:relative">
+          <textarea id="taskPrompt" placeholder="输入视频提示词（选图后输入 @ 可绑定图片）" rows="3" style="width:100%;box-sizing:border-box;resize:vertical"></textarea>
+          <div id="mentionsList" style="display:none; position:absolute; z-index:100; background:#fff; border:1px solid #ddd; border-radius:4px; max-height:150px; overflow-y:auto; box-shadow:0 2px 4px rgba(0,0,0,0.1); width:100%;"></div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group" style="flex:1">
+            <label>生成模式</label>
+            <select id="taskGenMode">
+              <option value="视频生成">视频生成</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:1">
+            <label>选择模型</label>
+            <select id="taskModel">
+              <option value="Seedance 2.0 Fast">Seedance 2.0 Fast</option>
+              <option value="Seedance 2.0">Seedance 2.0</option>
+              <option value="Seedance 1.5 Pro" selected>Seedance 1.5 Pro</option>
+              <option value="Seedance 1.0">Seedance 1.0</option>
+              <option value="Seedance 1.0 Fast">Seedance 1.0 Fast</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group" style="flex:1">
+            <label>参考模式</label>
+            <select id="taskRefMode">
+              <option value="全能参考">全能参考</option>
+              <option value="首尾帧">首尾帧</option>
+              <option value="智能多帧">智能多帧</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:1">
+            <label>视频比例</label>
+            <select id="taskRatio">
+              <option value="21:9">21:9</option>
+              <option value="16:9" selected>16:9</option>
+              <option value="4:3">4:3</option>
+              <option value="1:1">1:1</option>
+              <option value="3:4">3:4</option>
+              <option value="9:16">9:16</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group" style="flex:1">
+            <label>视频时长</label>
+            <select id="taskDuration">
+              <option value="4s">4s</option>
+              <option value="5s" selected>5s</option>
+              <option value="6s">6s</option>
+              <option value="7s">7s</option>
+              <option value="8s">8s</option>
+              <option value="9s">9s</option>
+              <option value="10s">10s</option>
+              <option value="11s">11s</option>
+              <option value="12s">12s</option>
+              <option value="13s">13s</option>
+              <option value="14s">14s</option>
+              <option value="15s">15s</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:1">
+            <label>@本地图片</label>
+            <input type="file" id="taskImageFile" accept="image/*" multiple style="width:100%" title="最多可选9张"/>
+            <div id="taskImagePreview" style="display:flex; flex-wrap:wrap; gap:4px; margin-top:4px; max-height: 80px; overflow-y:auto;"></div>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button id="btnAddTask" class="btn btn-primary">➕ 添加到备用队列</button>
+          <button id="btnClearPending" class="btn btn-danger-ghost">清空队列</button>
+        </div>
+      </div>
+      <div class="task-list" id="pendingList">
+        <div class="empty-hint">备用队列为空，请添加任务</div>
+      </div>
+    </div>
+
+    <!-- 进行中 Tab -->
+    <div class="tab-content" id="tab-active">
+      <div class="progress-bar-wrap">
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill" style="width:0%"></div>
+        </div>
+        <span class="progress-label" id="progressLabel">0 / 10</span>
+      </div>
+      <div class="task-list" id="activeList">
+        <div class="empty-hint">暂无进行中的任务</div>
+      </div>
+    </div>
+
+    <!-- 历史记录 Tab -->
+    <div class="tab-content" id="tab-history">
+      <div class="btn-row" style="margin-bottom:8px">
+        <button id="btnClearHistory" class="btn btn-danger-ghost btn-sm">清空历史</button>
+      </div>
+      <div class="task-list" id="historyList">
+        <div class="empty-hint">暂无历史记录</div>
+      </div>
+    </div>
+
+    <!-- 日志 Tab -->
+    <div class="tab-content" id="tab-logs">
+      <div class="btn-row" style="margin-bottom:8px">
+        <button id="btnClearLogs" class="btn btn-danger-ghost btn-sm">清空日志</button>
+      </div>
+      <div class="log-list" id="logList">
+        <div class="empty-hint">暂无日志</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
+
+
